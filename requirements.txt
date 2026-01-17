@@ -3,15 +3,18 @@ uvicorn[standard]
 
 # Database
 sqlalchemy
-asyncmy
+aiosqlite
 alembic
+aiomysql
+cryptography
 
 # Auth & Security
-python-jose
+python-jose[cryptography]
 passlib[bcrypt]
 
 # Validation & Schemas
 pydantic
+pydantic-settings
 email-validator
 
 # File Upload

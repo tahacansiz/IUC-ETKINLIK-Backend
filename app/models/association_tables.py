@@ -1,5 +1,4 @@
-from sqlalchemy import Table, Column, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Table, Column, ForeignKey, String
 from app.models.base import Base
 
 event_categories = Table(
@@ -7,13 +6,13 @@ event_categories = Table(
     Base.metadata,
     Column(
         "event_id",
-        UUID(as_uuid=True),
+        String(36),
         ForeignKey("events.id"),
         primary_key=True
     ),
     Column(
         "category_id",
-        UUID(as_uuid=True),
+        String(36),
         ForeignKey("categories.id"),
         primary_key=True
     )

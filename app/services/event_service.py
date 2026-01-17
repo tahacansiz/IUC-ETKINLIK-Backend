@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
 from app.models.event import Event
-from app.schemas.event import EventCreate
+from app.schemas.event import EventCreate, EventUpdate
 from app.models.category import Category
 from app.services.media_service import MediaService
 
@@ -13,15 +13,24 @@ class EventService:
     async def create_event(
         db: AsyncSession,
         event_in: EventCreate,
-        creator_id: str
+        creator_id: str,
+        organizer_name: str = None
     ) -> Event:
-
+        """Create a new event with all frontend-expected fields"""
         event = Event(
             title=event_in.title,
             description=event_in.description,
-            event_date=event_in.event_date,
+            event_date=event_in.dateTime,  # Frontend sends dateTime
             location=event_in.location,
-            creator_id=creator_id
+            category_id=event_in.categoryId,  # Frontend sends categoryId
+            image_url=event_in.imageUrl,  # Frontend sends imageUrl
+            max_participants=event_in.maxParticipants,  # Frontend sends maxParticipants
+            creator_id=creator_id,
+            organizer_name=organizer_name,
+            current_participants=0,
+            status="upcoming",
+            is_featured=False,
+            created_at=datetime.utcnow()
         )
 
         db.add(event)
@@ -83,7 +92,7 @@ class EventService:
         db,
         event_id: str,
         requester_id: str,
-        event_in
+        event_in: EventUpdate
     ):
         event = await db.get(Event, event_id)
         if not event:
@@ -92,13 +101,26 @@ class EventService:
         if event.creator_id != requester_id:
             raise HTTPException(status_code=403, detail="Not allowed")
 
-        for field, value in event_in.model_dump(exclude_unset=True).items():
+        # Map frontend field names to backend field names
+        update_data = event_in.model_dump(exclude_unset=True)
+        field_mapping = {
+            'dateTime': 'event_date',
+            'categoryId': 'category_id',
+            'imageUrl': 'image_url',
+            'maxParticipants': 'max_participants',
+            'isFeatured': 'is_featured'
+        }
+        
+        for frontend_field, backend_field in field_mapping.items():
+            if frontend_field in update_data:
+                update_data[backend_field] = update_data.pop(frontend_field)
+        
+        for field, value in update_data.items():
             setattr(event, field, value)
 
         await db.commit()
         await db.refresh(event)
         return event
-    from app.models.category import Category
 
     @staticmethod
     async def assign_categories(
@@ -124,17 +146,6 @@ class EventService:
         await db.commit()
         await db.refresh(event)
         return event
-    
-    @staticmethod
-    async def upcoming_events(db, limit: int = 10):
-        stmt = (
-            select(Event)
-            .where(Event.start_time >= datetime.utcnow())
-            .order_by(Event.start_time.asc())
-            .limit(limit)
-        )
-        result = await db.execute(stmt)
-        return result.scalars().all()
     
     @staticmethod
     async def upload_event_poster(

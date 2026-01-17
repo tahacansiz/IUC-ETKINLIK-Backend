@@ -12,12 +12,20 @@ class EventParticipationService:
         event_id: str,
         user_id: str
     ):
+        """Join an event - matches frontend joinEvent()"""
         # Event var mı?
         event = await db.get(Event, event_id)
         if not event:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Event not found"
+                detail="Etkinlik bulunamadı"
+            )
+
+        # Check if event is full
+        if event.current_participants >= event.max_participants:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Etkinlik dolu"
             )
 
         # Daha önce katılmış mı?
@@ -30,7 +38,7 @@ class EventParticipationService:
         if result.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Already joined"
+                detail="Zaten katıldınız"
             )
 
         participation = EventParticipant(
@@ -38,7 +46,12 @@ class EventParticipationService:
             user_id=user_id
         )
         db.add(participation)
+        
+        # Increment participant count
+        event.current_participants += 1
+        
         await db.commit()
+        return {"success": True, "message": "Etkinliğe katıldınız"}
 
     @staticmethod
     async def leave_event(
@@ -46,6 +59,14 @@ class EventParticipationService:
         event_id: str,
         user_id: str
     ):
+        """Leave an event - matches frontend leaveEvent()"""
+        event = await db.get(Event, event_id)
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Etkinlik bulunamadı"
+            )
+
         result = await db.execute(
             select(EventParticipant).where(
                 EventParticipant.event_id == event_id,
@@ -57,20 +78,14 @@ class EventParticipationService:
         if not participation:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Not joined"
+                detail="Bu etkinliğe katılmamışsınız"
             )
 
         await db.delete(participation)
+        
+        # Decrement participant count
+        if event.current_participants > 0:
+            event.current_participants -= 1
+        
         await db.commit()
-
-    # @staticmethod
-    # async def list_participants(
-    #     db: AsyncSession,
-    #     event_id: str
-    # ):
-    #     result = await db.execute(
-    #         select(EventParticipant).where(
-    #             EventParticipant.event_id == event_id
-    #         )
-    #     )
-    #     return result.scalars().all()
+        return {"success": True, "message": "Etkinlikten ayrıldınız"}
